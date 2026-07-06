@@ -1,4 +1,5 @@
 from datetime import datetime
+from airflow.providers.google.cloud.transfers.gcs_to_gcs import GCSToGCSOperator
 
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
@@ -43,9 +44,18 @@ with DAG(
         write_disposition="WRITE_TRUNCATE",
         autodetect=True,
     )
+    
+    archive_customer_file = GCSToGCSOperator(
+        task_id="archive_customer_file",
+        source_bucket=BUCKET_NAME,
+        source_object="raw/customer.csv",
+        destination_bucket=BUCKET_NAME,
+        destination_object="archive/customer.csv",
+        move_object=True,
+    )
 
     end = EmptyOperator(
         task_id="end"
     )
 
-    start >> wait_for_customer_file >> load_customers >> end
+    start >> wait_for_customer_file >> load_customers >> archive_customer_file >> end
