@@ -1,17 +1,25 @@
 from datetime import datetime
 from airflow.providers.google.cloud.transfers.gcs_to_gcs import GCSToGCSOperator
 
+from services.ingestion_service import validate_customer_file
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.google.cloud.sensors.gcs import GCSObjectExistenceSensor
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import (
     GCSToBigQueryOperator,
 )
 
-PROJECT_ID = "enduring-coil-501604-u1"
-BUCKET_NAME = "de-pipeline-venkatesh-501604"
-DATASET = "retail"
-TABLE = "bronze_customers"
+from utils.config import (
+    PROJECT_ID,
+    BUCKET_NAME,
+    DATASET,
+    BRONZE_CUSTOMERS_TABLE,
+    RAW_FOLDER,
+    ARCHIVE_FOLDER,
+    GOOGLE_CONN_ID,
+    CUSTOMER_FILE ,
+)
 
 with DAG(
     dag_id="customer_ingestion",
@@ -28,17 +36,26 @@ with DAG(
     wait_for_customer_file = GCSObjectExistenceSensor(
         task_id="wait_for_customer_file",
         bucket=BUCKET_NAME,
-        object="raw/customer.csv",
-        google_cloud_conn_id="google_cloud_default",
+        object=f"{RAW_FOLDER}/{CUSTOMER_FILE}",
+        google_cloud_conn_id=GOOGLE_CONN_ID,
         poke_interval=60,
         timeout=60 * 60,
+    )
+
+    validate_customer = PythonOperator(
+        task_id="validate_customer_file",
+        python_callable=validate_customer_file,
+        op_kwargs={
+            "bucket_name": BUCKET_NAME,
+            "object_name": f"{RAW_FOLDER}/{CUSTOMER_FILE}",
+        },
     )
 
     load_customers = GCSToBigQueryOperator(
         task_id="load_customers_to_bigquery",
         bucket=BUCKET_NAME,
-        source_objects=["raw/customer.csv"],
-        destination_project_dataset_table=f"{PROJECT_ID}.{DATASET}.{TABLE}",
+        source_objects=[f"{RAW_FOLDER}/{CUSTOMER_FILE}"],
+        destination_project_dataset_table=f"{PROJECT_ID}.{DATASET}.{BRONZE_CUSTOMERS_TABLE}",
         source_format="CSV",
         skip_leading_rows=1,
         write_disposition="WRITE_TRUNCATE",
@@ -48,9 +65,9 @@ with DAG(
     archive_customer_file = GCSToGCSOperator(
         task_id="archive_customer_file",
         source_bucket=BUCKET_NAME,
-        source_object="raw/customer.csv",
+        source_object=f"{RAW_FOLDER}/{CUSTOMER_FILE}",
         destination_bucket=BUCKET_NAME,
-        destination_object="archive/customer.csv",
+        destination_object=f"{ARCHIVE_FOLDER}/{CUSTOMER_FILE}",
         move_object=True,
     )
 
@@ -58,4 +75,4 @@ with DAG(
         task_id="end"
     )
 
-    start >> wait_for_customer_file >> load_customers >> archive_customer_file >> end
+    workflow = start >> wait_for_customer_file >> validate_customer >> load_customers >> archive_customer_file >> end
