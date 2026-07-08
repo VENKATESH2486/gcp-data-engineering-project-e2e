@@ -1,13 +1,16 @@
 from datetime import datetime
 from airflow.providers.google.cloud.transfers.gcs_to_gcs import GCSToGCSOperator
 
-from services.ingestion_service import validate_customer_file
 from airflow import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.google.cloud.sensors.gcs import GCSObjectExistenceSensor
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import (
     GCSToBigQueryOperator,
+)
+
+from airflow.providers.google.cloud.operators.bigquery import (
+    BigQueryInsertJobOperator,
 )
 
 from utils.config import (
@@ -20,6 +23,8 @@ from utils.config import (
     GOOGLE_CONN_ID,
     CUSTOMER_FILE ,
 )
+from utils.sql_utils import load_sql
+from services.ingestion_service import validate_customer_file
 
 with DAG(
     dag_id="customer_ingestion",
@@ -61,7 +66,17 @@ with DAG(
         write_disposition="WRITE_TRUNCATE",
         autodetect=True,
     )
-    
+
+    bronze_to_silver = BigQueryInsertJobOperator(
+        task_id="bronze_to_silver",
+        configuration={
+            "query": {
+                "query": load_sql("bronze_to_silver.sql"),
+                "useLegacySql": False,
+            }
+        },
+        location="US",
+    )
     archive_customer_file = GCSToGCSOperator(
         task_id="archive_customer_file",
         source_bucket=BUCKET_NAME,
@@ -75,4 +90,4 @@ with DAG(
         task_id="end"
     )
 
-    workflow = start >> wait_for_customer_file >> validate_customer >> load_customers >> archive_customer_file >> end
+    workflow = start >> wait_for_customer_file >> validate_customer >> load_customers >> bronze_to_silver >> archive_customer_file >> end
