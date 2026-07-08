@@ -22,16 +22,32 @@ from utils.config import (
     ARCHIVE_FOLDER,
     GOOGLE_CONN_ID,
     CUSTOMER_FILE ,
+    SILVER_CUSTOMERS_TABLE,
+    GOLD_CUSTOMER_SUMMARY_TABLE,
+    BQ_LOCATION,
 )
 from utils.sql_utils import load_sql
 from services.ingestion_service import validate_customer_file
+from datetime import timedelta
+
+default_args = {
+    "owner": "venkatesh",
+    "retries": 2,
+    "retry_delay": timedelta(minutes=2),
+}
 
 with DAG(
     dag_id="customer_ingestion",
     start_date=datetime(2026, 1, 1),
     schedule=None,
     catchup=False,
-    tags=["gcp", "bigquery", "bronze"],
+    tags=[
+        "gcp",
+        "medallion",
+        "customer",
+        "bigquery",
+    ],
+    default_args=default_args,
 ) as dag:
 
     start = EmptyOperator(
@@ -71,12 +87,34 @@ with DAG(
         task_id="bronze_to_silver",
         configuration={
             "query": {
-                "query": load_sql("bronze_to_silver.sql"),
+                "query": load_sql("bronze_to_silver.sql").format(
+                project_id=PROJECT_ID,
+                dataset=DATASET,
+                bronze_table=BRONZE_CUSTOMERS_TABLE,
+                silver_table=SILVER_CUSTOMERS_TABLE
+            ),
                 "useLegacySql": False,
             }
         },
-        location="US",
+        location=BQ_LOCATION,
     )
+
+    silver_to_gold = BigQueryInsertJobOperator(
+        task_id="silver_to_gold",
+        configuration={
+            "query": {
+                "query": load_sql("silver_to_gold.sql").format(
+                project_id=PROJECT_ID,
+                dataset=DATASET,
+                silver_table=SILVER_CUSTOMERS_TABLE,
+                gold_table=GOLD_CUSTOMER_SUMMARY_TABLE
+            ),
+                "useLegacySql": False,
+            }
+        },
+        location=BQ_LOCATION,
+    )
+
     archive_customer_file = GCSToGCSOperator(
         task_id="archive_customer_file",
         source_bucket=BUCKET_NAME,
@@ -90,4 +128,4 @@ with DAG(
         task_id="end"
     )
 
-    workflow = start >> wait_for_customer_file >> validate_customer >> load_customers >> bronze_to_silver >> archive_customer_file >> end
+    start >> wait_for_customer_file >> validate_customer >> load_customers >> bronze_to_silver >> silver_to_gold >> archive_customer_file >> end

@@ -2,3 +2,6 @@ apache-airflow-providers-google
 pandas
 google-cloud-storage
 google-cloud-bigquery
+faker==37.5.3
+numpy
+pandas
