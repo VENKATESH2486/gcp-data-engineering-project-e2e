@@ -1,0 +1,38 @@
+name: Deploy Composer DAGs
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy DAGs
+        run: |
+          gsutil -m cp -r dags/* gs://${{ secrets.COMPOSER_BUCKET }}/dags/
+
+      - name: Deploy Utils
+        run: |
+          gsutil -m cp -r utils gs://${{ secrets.COMPOSER_BUCKET }}/dags/
+
+      - name: Deploy Services
+        run: |
+          gsutil -m cp -r services gs://${{ secrets.COMPOSER_BUCKET }}/dags/
+
+      - name: Deploy SQL
+        run: |
+          gsutil -m cp -r sql gs://${{ secrets.COMPOSER_BUCKET }}/dags/
