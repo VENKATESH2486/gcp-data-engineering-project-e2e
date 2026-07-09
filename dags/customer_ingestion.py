@@ -124,8 +124,35 @@ with DAG(
         move_object=True,
     )
 
+    audit_pipeline = BigQueryInsertJobOperator(
+        task_id="audit_pipeline",
+
+        configuration={
+            "query": {
+                "query": load_sql("audit_success.sql").format(
+                    project_id=PROJECT_ID,
+                    dataset=DATASET,
+
+                    bronze_table=BRONZE_CUSTOMERS_TABLE,
+                    silver_table=SILVER_CUSTOMERS_TABLE,
+                    gold_table=GOLD_CUSTOMER_SUMMARY_TABLE,
+
+                    dag_id="{{ dag.dag_id }}",
+                    run_id="{{ run_id }}",
+                    execution_date="{{ ts }}",
+                    start_time="{{ ts }}",
+
+                    source_file=CUSTOMER_FILE,
+                ),
+                "useLegacySql": False,
+            }
+        },
+
+        location=BQ_LOCATION,
+    )
+
     end = EmptyOperator(
         task_id="end"
     )
 
-    start >> wait_for_customer_file >> validate_customer >> load_customers >> bronze_to_silver >> silver_to_gold >> archive_customer_file >> end
+    start >> wait_for_customer_file >> validate_customer >> load_customers >> bronze_to_silver >> silver_to_gold >> audit_pipeline >> archive_customer_file >> end

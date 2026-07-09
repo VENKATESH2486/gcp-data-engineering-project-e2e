@@ -10,9 +10,8 @@
 --   5. Remove duplicates using ROW_NUMBER() window function
 -- ============================================================================
 
-CREATE OR REPLACE TABLE `{project_id}.{dataset}.{silver_table}` 
-PARTITION BY created_date
-CLUSTER BY customer_id
+CREATE OR REPLACE temp TABLE temp_silver_customers
+
 AS
 WITH cleaned AS (
   -- =========================================================================
@@ -68,3 +67,37 @@ SELECT
 FROM ranked
 WHERE row_num = 1
 ;
+
+merge `{project_id}.{dataset}.{silver_table}` tgt
+using temp_silver_customers src
+on src.customer_id = tgt.customer_id
+when matched then update set 
+    tgt.first_name = src.first_name,
+    tgt.last_name = src.last_name,
+    tgt.email = src.email,
+    tgt.city = src.city,
+    tgt.country = src.country,
+    tgt.created_date = src.created_date,
+    tgt.created_timestamp = src.created_timestamp,
+    tgt.processed_at = src.processed_at
+when not matched then insert (
+    customer_id,
+    first_name,
+    last_name,
+    email,
+    city,
+    country,
+    created_date,
+    created_timestamp,
+    processed_at
+) values (
+    src.customer_id,
+    src.first_name,
+    src.last_name,
+    src.email,
+    src.city,
+    src.country,
+    src.created_date,
+    src.created_timestamp,
+    src.processed_at
+);
