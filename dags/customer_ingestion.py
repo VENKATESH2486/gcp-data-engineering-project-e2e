@@ -54,6 +54,7 @@ with DAG(
         "medallion",
         "customer",
         "bigquery",
+        "git-cicd",
     ],
     default_args=default_args,
 ) as dag:
