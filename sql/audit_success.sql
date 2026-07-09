@@ -28,13 +28,13 @@ INSERT INTO `{project_id}.audit.pipeline_run_log`
 
 SELECT
 
-    '{run_id}',
+    '{{{{ dag_run.run_id }}}}',
 
-    '{dag_id}',
+    '{{{{ dag.dag_id }}}}',
 
     'Customer Ingestion Pipeline',
 
-    TIMESTAMP('{execution_date}'),
+    TIMESTAMP('{{{{ ts }}}}'),
 
     '{source_file}',
 
@@ -61,13 +61,13 @@ SELECT
 
     'SUCCESS',
 
-    TIMESTAMP('{start_time}'),
+    TIMESTAMP('{{{{ ts }}}}'),
 
     CURRENT_TIMESTAMP(),
 
     TIMESTAMP_DIFF(
         CURRENT_TIMESTAMP(),
-        TIMESTAMP('{start_time}'),
+        TIMESTAMP('{{{{ ts }}}}'),
         SECOND
     ),
 

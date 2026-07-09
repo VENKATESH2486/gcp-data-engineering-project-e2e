@@ -94,7 +94,7 @@ def main():
     parser.add_argument(
         "--rows",
         type=int,
-        default=20000,
+        default=200,
         help="Number of customers to generate",
     )
 

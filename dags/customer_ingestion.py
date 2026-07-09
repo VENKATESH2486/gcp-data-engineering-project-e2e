@@ -36,6 +36,14 @@ default_args = {
     "retry_delay": timedelta(minutes=2),
 }
 
+DEFAULT_OBJECT = f"{RAW_FOLDER}/{CUSTOMER_FILE}"
+OBJECT_NAME = "{{ dag_run.conf.get('object', '" + DEFAULT_OBJECT + "') }}"
+
+DEFAULT_BUCKET = BUCKET_NAME
+BUCKET = "{{ dag_run.conf.get('bucket', '" + DEFAULT_BUCKET + "') }}"
+
+ARCHIVE_OBJECT = "{{ dag_run.conf.get('object', '" + DEFAULT_OBJECT + "').replace('raw/', 'archive/') }}"
+
 with DAG(
     dag_id="customer_ingestion",
     start_date=datetime(2026, 1, 1),
@@ -56,8 +64,8 @@ with DAG(
 
     wait_for_customer_file = GCSObjectExistenceSensor(
         task_id="wait_for_customer_file",
-        bucket=BUCKET_NAME,
-        object=f"{RAW_FOLDER}/{CUSTOMER_FILE}",
+        bucket=BUCKET,
+        object=OBJECT_NAME,
         google_cloud_conn_id=GOOGLE_CONN_ID,
         poke_interval=60,
         timeout=60 * 60,
@@ -67,15 +75,15 @@ with DAG(
         task_id="validate_customer_file",
         python_callable=validate_customer_file,
         op_kwargs={
-            "bucket_name": BUCKET_NAME,
-            "object_name": f"{RAW_FOLDER}/{CUSTOMER_FILE}",
+            "bucket_name": BUCKET,
+            "object_name": OBJECT_NAME,
         },
     )
 
     load_customers = GCSToBigQueryOperator(
         task_id="load_customers_to_bigquery",
-        bucket=BUCKET_NAME,
-        source_objects=[f"{RAW_FOLDER}/{CUSTOMER_FILE}"],
+        bucket=BUCKET,
+        source_objects=[OBJECT_NAME],
         destination_project_dataset_table=f"{PROJECT_ID}.{DATASET}.{BRONZE_CUSTOMERS_TABLE}",
         source_format="CSV",
         skip_leading_rows=1,
@@ -117,10 +125,10 @@ with DAG(
 
     archive_customer_file = GCSToGCSOperator(
         task_id="archive_customer_file",
-        source_bucket=BUCKET_NAME,
-        source_object=f"{RAW_FOLDER}/{CUSTOMER_FILE}",
-        destination_bucket=BUCKET_NAME,
-        destination_object=f"{ARCHIVE_FOLDER}/{CUSTOMER_FILE}",
+        source_bucket=BUCKET,
+        source_object=OBJECT_NAME,
+        destination_bucket=BUCKET,
+        destination_object=ARCHIVE_OBJECT,
         move_object=True,
     )
 
@@ -137,12 +145,7 @@ with DAG(
                     silver_table=SILVER_CUSTOMERS_TABLE,
                     gold_table=GOLD_CUSTOMER_SUMMARY_TABLE,
 
-                    dag_id="{{ dag.dag_id }}",
-                    run_id="{{ run_id }}",
-                    execution_date="{{ ts }}",
-                    start_time="{{ ts }}",
-
-                    source_file=CUSTOMER_FILE,
+                    source_file=OBJECT_NAME,
                 ),
                 "useLegacySql": False,
             }
