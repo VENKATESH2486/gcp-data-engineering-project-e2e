@@ -25,6 +25,7 @@ from utils.config import (
     GOLD_CUSTOMER_SUMMARY_TABLE,
     BQ_LOCATION,
 )
+from utils.email_utils import notify_failure, notify_success
 from utils.sql_utils import load_sql
 from services.ingestion_service import validate_customer_file
 from datetime import timedelta
@@ -56,6 +57,8 @@ with DAG(
         "git-cicd",
     ],
     default_args=default_args,
+    on_failure_callback=notify_failure,
+    on_success_callback=notify_success,
 ) as dag:
 
     start = EmptyOperator(
